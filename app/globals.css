@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base: #0A0A0A;
+  --bg-surface: #141414;
+  --bg-elevated: #1C1C1C;
+  --accent: #E8FF3D;
+  --accent-dim: #B8CC30;
+  --text-primary: #F5F5F5;
+  --text-muted: #888888;
+  --text-dim: #444444;
+  --status-green: #22C55E;
+  --status-yellow: #FF9500;
+  --status-red: #FF4444;
+  --border: #2A2A2A;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4, h5, h6, .metric-number, .label {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.metric-number {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (min-width: 768px) {
+  .desktop-sidebar {
+    display: flex !important;
+  }
+  .app-main {
+    margin-left: 220px;
+    padding-bottom: 0 !important;
+  }
+  .mobile-nav {
+    display: none !important;
+  }
+}

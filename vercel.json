@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/garmin/sync", "schedule": "0 9 * * *" },
+    { "path": "/api/garmin/activities", "schedule": "0 9 * * *" },
+    { "path": "/api/withings/sync", "schedule": "0 9 * * *" },
+    { "path": "/api/trainingpeaks/sync", "schedule": "0 9 * * *" }
+  ]
+}
