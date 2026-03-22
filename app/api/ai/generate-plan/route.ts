@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAnthropicClient, CLAUDE_MODEL } from '@/lib/ai/client';
-import { TRAINING_PLAN_SYSTEM } from '@/lib/ai/prompts';
-import { format, differenceInWeeks, parseISO } from 'date-fns';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,45 +9,49 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { sport, race_distance, race_date, current_weekly_miles, training_days, fitness_level } = body;
+    const { goal, weeks, training_days, fitness_level, equipment } = body;
 
-    if (!sport || !race_distance || !race_date) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    if (!goal || !weeks) {
+      return NextResponse.json({ error: 'Missing required fields: goal, weeks' }, { status: 400 });
     }
-
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const weeks = Math.max(4, Math.min(24, differenceInWeeks(parseISO(race_date), new Date())));
 
     const anthropic = getAnthropicClient();
 
-    const prompt = `Generate a complete ${weeks}-week training plan for a ${race_distance} ${sport} race on ${race_date}.
+    const prompt = `Generate a ${weeks}-week strength and conditioning program.
 
 Athlete profile:
-- Current weekly mileage/volume: ${current_weekly_miles || 'unknown'} miles/week
-- Available training days: ${training_days?.join(', ') || 'Mon, Wed, Fri, Sat, Sun'}
+- Goal: ${goal} (e.g. strength, muscle building, CrossFit, general fitness)
+- Available training days: ${training_days?.join(', ') || 'Mon, Tue, Thu, Fri'}
 - Fitness level: ${fitness_level || 'intermediate'}
-- Weeks until race: ${weeks}
+- Equipment: ${equipment || 'full gym (barbells, dumbbells, pullup bar, rower, ski erg, assault bike)'}
+- Weeks: ${weeks}
 
 Return ONLY valid JSON in this exact schema (no extra text, no markdown):
 {
   "name": "string",
-  "sport": "string",
-  "race_distance": "string",
-  "race_date": "YYYY-MM-DD",
+  "sport": "strength",
   "total_weeks": number,
   "plan_data": {
     "weeks": [{
       "week_number": number,
       "focus": "string",
-      "total_distance_miles": number,
       "days": [{
         "day_of_week": "monday",
-        "type": "run|strength|bike|rest|cross-train",
+        "type": "strength|crossfit|rest|active_recovery",
         "title": "string",
         "description": "string",
         "duration_min": number,
-        "distance_miles": number,
-        "intensity_zone": 1
+        "blocks": [{
+          "type": "strength|emom|amrap|fortime|tabata|rest",
+          "name": "string",
+          "exercises": [{
+            "name": "string",
+            "sets": number,
+            "reps": "string",
+            "weight": "string",
+            "notes": "string"
+          }]
+        }]
       }]
     }]
   }
@@ -58,7 +60,7 @@ Return ONLY valid JSON in this exact schema (no extra text, no markdown):
     const response = await anthropic.messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 8000,
-      system: TRAINING_PLAN_SYSTEM,
+      system: 'You are an expert strength and conditioning coach. Generate structured, progressive training programs. Always return valid JSON only.',
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -68,12 +70,10 @@ Return ONLY valid JSON in this exact schema (no extra text, no markdown):
       .join('')
       .trim();
 
-    // Extract JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return NextResponse.json({ error: 'Failed to parse plan JSON' }, { status: 500 });
 
     const plan = JSON.parse(jsonMatch[0]);
-    plan.total_weeks = weeks;
 
     return NextResponse.json({ success: true, plan });
   } catch (err: any) {
