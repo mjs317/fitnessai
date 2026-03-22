@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
     } catch (loginErr: any) {
       if (loginErr.message === '__MFA_CAPTURED__' && capturedMfa) {
         // Save MFA checkpoint (form URL + SSO cookies) so verify-mfa can use them
-        const mfaPayload = JSON.stringify({ __mfa: true, ...capturedMfa });
+        const { formUrl, csrf, jarJson } = capturedMfa;
+        const mfaPayload = JSON.stringify({ __mfa: true, formUrl, csrf, jarJson });
         await serviceSupabase.from('user_settings').upsert({
           user_id: user.id,
           garmin_session_cookies: encrypt(mfaPayload),
