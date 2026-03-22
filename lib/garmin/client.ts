@@ -2,8 +2,23 @@
 import { GarminConnect } from 'garmin-connect';
 
 // Regex mirrors what the garmin-connect library uses internally
-const TICKET_RE = /ticket=([^"]+)"/;
+const TICKET_RE = /ticket=([^"&\s]+)/;
 const CSRF_RE = /name="_csrf"\s+value="([^"]+)"/i;
+
+/** Extract all hidden input fields from an HTML form. */
+function extractHiddenFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const inputRe = /<input\s[^>]+>/gi;
+  let m;
+  while ((m = inputRe.exec(html)) !== null) {
+    const tag = m[0];
+    if (!/type\s*=\s*["']hidden["']/i.test(tag)) continue;
+    const name = /name\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    const raw = /value\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? '';
+    if (name) fields[name] = raw.replace(/&amp;/g, '&').replace(/&#x2F;/g, '/');
+  }
+  return fields;
+}
 
 // ─── Session persistence ───────────────────────────────────────────────────────
 // The garmin-connect library authenticates with OAuth2 tokens (Bearer), NOT cookies.
@@ -38,7 +53,7 @@ async function tryRestoreSession(gc: GarminConnect, savedJson: string): Promise<
 // so we can intercept the MFA page HTML and handle it ourselves.
 // handleMFA is called synchronously with its return ignored, so it cannot be used.
 
-type MfaState = { formUrl: string; csrf: string };
+type MfaState = { formUrl: string; hiddenFields: Record<string, string> };
 
 function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | null> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -103,8 +118,9 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
     if (formUrl && !formUrl.startsWith('http')) formUrl = 'https://sso.garmin.com' + formUrl;
     const mfaCsrf = CSRF_RE.exec(step3Html)?.[1] ?? '';
 
-    console.log('[garmin] MFA required — form URL:', formUrl || '(not found)');
-    capturedMfa = { formUrl, csrf: mfaCsrf };
+    const hiddenFields = extractHiddenFields(step3Html);
+    console.log('[garmin] MFA required — form URL:', formUrl || '(not found)', '| hidden fields:', Object.keys(hiddenFields).join(','));
+    capturedMfa = { formUrl, hiddenFields };
     throw new Error('__MFA_REQUIRED__');
   };
 
@@ -159,7 +175,7 @@ export async function loginWithMFADetection(
   password: string,
 ): Promise<
   | { type: 'success'; gc: GarminConnect }
-  | { type: 'mfa'; formUrl: string; csrf: string }
+  | { type: 'mfa'; formUrl: string; hiddenFields: Record<string, string> }
 > {
   const gc = new GarminConnect({ username: email, password });
   const mfaState = await patchGetLoginTicketForCapture(gc);
@@ -178,7 +194,7 @@ export async function createGarminClientWithMFA(
   email: string,
   encryptedPassword: string,
   mfaFormUrl: string,
-  mfaCsrf: string,
+  mfaHiddenFields: Record<string, string>,
   mfaCode: string,
 ): Promise<GarminConnect> {
   const { decrypt } = await import('@/lib/crypto');
@@ -187,27 +203,52 @@ export async function createGarminClientWithMFA(
   const httpClient = (gc as any).client;
 
   httpClient.getLoginTicket = async function (_u: string, _p: string) {
-    const body = new URLSearchParams({ verificationCode: mfaCode.trim() });
-    if (mfaCsrf) body.set('_csrf', mfaCsrf);
+    // Start with all hidden fields from the original form, then add the code
+    const params: Record<string, string> = { ...mfaHiddenFields, verificationCode: mfaCode.trim() };
+    const bodyStr = new URLSearchParams(params).toString();
 
-    console.log('[garmin/mfa] Posting code to:', mfaFormUrl);
-    const mfaHtml: string = await this.post(mfaFormUrl, body.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Origin: 'https://sso.garmin.com',
-        Referer: 'https://sso.garmin.com/sso/signin',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: 'https://sso.garmin.com',
+      Referer: 'https://sso.garmin.com/sso/signin',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    };
 
-    const ticketMatch = TICKET_RE.exec(mfaHtml);
-    if (!ticketMatch) {
-      const snippet = typeof mfaHtml === 'string' ? mfaHtml.slice(0, 400) : String(mfaHtml);
-      console.error('[garmin/mfa] No ticket in MFA response:', snippet);
+    console.log('[garmin/mfa] Posting to:', mfaFormUrl);
+    console.log('[garmin/mfa] Form fields:', Object.keys(params).join(','));
+
+    // First try: no redirect following — check the Location header for the ticket
+    // (Garmin may redirect to the service URL which contains the ticket)
+    let ticket: string | null = null;
+    try {
+      const rawRes = await this.client.post(mfaFormUrl, bodyStr, {
+        headers,
+        maxRedirects: 0,
+        validateStatus: (s: number) => s >= 200 && s < 400,
+      });
+      const location: string = rawRes.headers?.location ?? '';
+      const body: string = typeof rawRes.data === 'string' ? rawRes.data : '';
+      console.log('[garmin/mfa] Direct response status:', rawRes.status, '| Location:', location.slice(0, 200));
+      const ticketMatch = TICKET_RE.exec(location) || TICKET_RE.exec(body);
+      if (ticketMatch) ticket = ticketMatch[1];
+    } catch (e: any) {
+      console.warn('[garmin/mfa] Direct POST failed:', e.message);
+    }
+
+    // Second try: follow redirects and scan the final HTML body
+    if (!ticket) {
+      const mfaHtml: string = await this.post(mfaFormUrl, bodyStr, { headers });
+      const snippet = typeof mfaHtml === 'string' ? mfaHtml.slice(0, 800) : String(mfaHtml);
+      console.log('[garmin/mfa] Followed-redirect body snippet:', snippet);
+      const ticketMatch = TICKET_RE.exec(typeof mfaHtml === 'string' ? mfaHtml : '');
+      if (ticketMatch) ticket = ticketMatch[1];
+    }
+
+    if (!ticket) {
       throw new Error('Invalid or expired verification code');
     }
     console.log('[garmin/mfa] Got ticket, completing OAuth…');
-    return ticketMatch[1];
+    return ticket;
   };
 
   await gc.login();

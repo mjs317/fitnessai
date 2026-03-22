@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       email,
       settings.garmin_password_encrypted,
       parsed.formUrl,
-      parsed.csrf ?? '',
+      parsed.hiddenFields ?? {},
       mfa_code.trim(),
     );
 

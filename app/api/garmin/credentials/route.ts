@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
-      // MFA required — save form URL + CSRF so verify-mfa can POST the code
-      // without starting a new Garmin session (which would send a new MFA email).
-      const { formUrl, csrf } = result;
-      const mfaState = JSON.stringify({ __mfa: true, formUrl, csrf });
+      // MFA required — save form URL + all hidden fields so verify-mfa can POST
+      // the code without starting a new Garmin session (= no new MFA email).
+      const { formUrl, hiddenFields } = result;
+      const mfaState = JSON.stringify({ __mfa: true, formUrl, hiddenFields });
       await serviceSupabase.from('user_settings').upsert({
         user_id: user.id,
         garmin_session_cookies: encrypt(mfaState),
