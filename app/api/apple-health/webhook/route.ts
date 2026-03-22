@@ -8,12 +8,10 @@ function toDate(dateStr: string): string {
   return dateStr.slice(0, 10);
 }
 
-/** Values in sleep_analysis that count as actual sleep (not InBed / Awake) */
-const SLEEP_VALUES = new Set([
-  'HKCategoryValueSleepAnalysisAsleep',
-  'HKCategoryValueSleepAnalysisAsleepCore',
-  'HKCategoryValueSleepAnalysisAsleepDeep',
-  'HKCategoryValueSleepAnalysisAsleepREM',
+/** Values in sleep_analysis to exclude (InBed and Awake are not real sleep) */
+const SLEEP_EXCLUDE = new Set([
+  'HKCategoryValueSleepAnalysisInBed',
+  'HKCategoryValueSleepAnalysisAwake',
 ]);
 
 interface MetricEntry {
@@ -88,7 +86,7 @@ function parsePayload(body: { data?: { metrics?: Metric[] } }) {
       const sleepByDate: Record<string, number> = {};
       for (const entry of data) {
         if (entry.qty == null) continue;
-        if (!SLEEP_VALUES.has(entry.value ?? '')) continue;
+        if (SLEEP_EXCLUDE.has(entry.value ?? '')) continue;
         // The date field is the START of the interval; sleep night ends the
         // next calendar day. We use the date of the entry as a proxy —
         // Health Auto Export typically groups entries under the "wake date".
@@ -118,7 +116,7 @@ function parsePayload(body: { data?: { metrics?: Metric[] } }) {
     }
 
     // ── Active Calories ───────────────────────────────────────────────────────
-    else if (name === 'active_energy_burned') {
+    else if (name === 'active_energy_burned' || name === 'active_energy') {
       const sums: Record<string, number> = {};
       for (const entry of data) {
         if (entry.qty == null) continue;
