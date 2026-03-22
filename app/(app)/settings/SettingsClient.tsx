@@ -61,6 +61,9 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [appleHealthWebhookUrl, setAppleHealthWebhookUrl] = useState('');
   const [appleHealthStatus, setAppleHealthStatus] = useState('');
+  const [appleHealthLastSync, setAppleHealthLastSync] = useState<string | null>(
+    initialSettings.apple_health_last_sync ?? null
+  );
   const [garminEmail, setGarminEmail] = useState(initialSettings.garmin_email || '');
   const [garminPassword, setGarminPassword] = useState('');
   const [garminStatus, setGarminStatus] = useState('');
@@ -71,6 +74,20 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [historicalProgress, setHistoricalProgress] = useState<{ day: number; total: number; imported: number } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+
+  // Check Apple Health connection status from DB on mount (bypasses SSR cache)
+  useEffect(() => {
+    fetch('/api/apple-health/setup')
+      .then(r => r.json())
+      .then(data => {
+        if (data.connected) {
+          setAppleHealthWebhookUrl(data.webhookUrl);
+          setSettings(s => ({ ...s, apple_health_webhook_token: 'connected' }));
+          if (data.lastSync) setAppleHealthLastSync(data.lastSync);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Show Withings connection status from URL params
   useEffect(() => {
@@ -212,7 +229,7 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
       const data = await res.json();
       if (data.webhookUrl) {
         setAppleHealthWebhookUrl(data.webhookUrl);
-        setSettings(s => ({ ...s, apple_health_webhook_token: data.token }));
+        setSettings(s => ({ ...s, apple_health_webhook_token: 'connected' }));
         setAppleHealthStatus('');
       } else {
         setAppleHealthStatus('✗ Setup failed');
@@ -266,7 +283,7 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
           <StatusDot connected={!!settings.apple_health_webhook_token} />
           <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
             {settings.apple_health_webhook_token
-              ? `Connected · Last sync: ${formatLastSync(settings.apple_health_last_sync)}`
+              ? `Connected · Last sync: ${formatLastSync(appleHealthLastSync)}`
               : 'Not connected'}
           </span>
         </div>

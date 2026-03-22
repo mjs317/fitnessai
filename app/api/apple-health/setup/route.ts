@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { randomBytes } from 'crypto';
 
+// GET /api/apple-health/setup
+// Returns connection status and existing webhook URL (if token already saved).
+export async function GET(_req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ connected: false });
+
+  const serviceSupabase = await createServiceRoleClient();
+  const { data: settings } = await serviceSupabase
+    .from('user_settings')
+    .select('apple_health_webhook_token, apple_health_last_sync')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!settings?.apple_health_webhook_token) {
+    return NextResponse.json({ connected: false });
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  return NextResponse.json({
+    connected: true,
+    webhookUrl: `${baseUrl}/api/apple-health/webhook?token=${settings.apple_health_webhook_token}`,
+    lastSync: settings.apple_health_last_sync ?? null,
+  });
+}
+
 // POST /api/apple-health/setup
 // Generates (or returns existing) webhook token and URL for the user.
 export async function POST(_req: NextRequest) {
