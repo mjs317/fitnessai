@@ -17,13 +17,14 @@ export async function POST(request: NextRequest) {
     const serviceSupabase = await createServiceRoleClient();
 
     // Save credentials immediately so verify-mfa can retrieve them even if we error below
-    await serviceSupabase.from('user_settings').upsert({
+    const { error: saveErr } = await serviceSupabase.from('user_settings').upsert({
       user_id: user.id,
       garmin_email: email,
       garmin_password_encrypted: encryptedPw,
       garmin_session_cookies: null,
       updated_at: new Date().toISOString(),
-    });
+    }, { onConflict: 'user_id' });
+    if (saveErr) console.error('[garmin/credentials] Failed to save credentials:', saveErr.message);
 
     const { loginWithMFADetection, getGarminSessionCookies } = await import('@/lib/garmin/client');
 
@@ -33,11 +34,12 @@ export async function POST(request: NextRequest) {
       if (result.type === 'success') {
         // Serialise OAuth tokens for future session restore
         const tokensJson = getGarminSessionCookies(result.gc);
-        await serviceSupabase.from('user_settings').upsert({
+        const { error: tokenErr } = await serviceSupabase.from('user_settings').upsert({
           user_id: user.id,
           garmin_session_cookies: tokensJson ? encrypt(tokensJson) : null,
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'user_id' });
+        if (tokenErr) console.error('[garmin/credentials] Failed to save tokens:', tokenErr.message);
         return NextResponse.json({ success: true });
       }
 
@@ -45,11 +47,13 @@ export async function POST(request: NextRequest) {
       // the code without starting a new Garmin session (= no new MFA email).
       const { formUrl, hiddenFields } = result;
       const mfaState = JSON.stringify({ __mfa: true, formUrl, hiddenFields });
-      await serviceSupabase.from('user_settings').upsert({
+      const { error: mfaErr } = await serviceSupabase.from('user_settings').upsert({
         user_id: user.id,
         garmin_session_cookies: encrypt(mfaState),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'user_id' });
+      if (mfaErr) console.error('[garmin/credentials] Failed to save MFA state:', mfaErr.message);
+      console.log('[garmin/credentials] MFA state saved, returning requires_mfa');
       return NextResponse.json({ success: false, requires_mfa: true });
     } catch (loginErr: any) {
       console.error('[garmin/credentials] Login error:', loginErr.message);

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       garmin_session_cookies: tokensJson ? encrypt(tokensJson) : null,
       updated_at: new Date().toISOString(),
-    });
+    }, { onConflict: 'user_id' });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
