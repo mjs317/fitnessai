@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS user_settings (
   trainingpeaks_ics_url       TEXT,
   trainingpeaks_last_sync     TIMESTAMPTZ,
 
+  -- Apple Health (via Health Auto Export webhook)
+  apple_health_webhook_token  TEXT UNIQUE,
+  apple_health_last_sync      TIMESTAMPTZ,
+
   -- Preferences
   timezone                    TEXT DEFAULT 'America/New_York',
   units                       TEXT DEFAULT 'imperial',   -- 'imperial' | 'metric'

@@ -59,6 +59,8 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
   const supabase = createClient();
 
   const [settings, setSettings] = useState(initialSettings);
+  const [appleHealthWebhookUrl, setAppleHealthWebhookUrl] = useState('');
+  const [appleHealthStatus, setAppleHealthStatus] = useState('');
   const [garminEmail, setGarminEmail] = useState(initialSettings.garmin_email || '');
   const [garminPassword, setGarminPassword] = useState('');
   const [garminStatus, setGarminStatus] = useState('');
@@ -203,6 +205,24 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
     setSyncing(null);
   };
 
+  const setupAppleHealth = async () => {
+    setSyncing('apple-health-setup');
+    try {
+      const res = await fetch('/api/apple-health/setup', { method: 'POST' });
+      const data = await res.json();
+      if (data.webhookUrl) {
+        setAppleHealthWebhookUrl(data.webhookUrl);
+        setSettings(s => ({ ...s, apple_health_webhook_token: data.token }));
+        setAppleHealthStatus('');
+      } else {
+        setAppleHealthStatus('✗ Setup failed');
+      }
+    } catch (err: any) {
+      setAppleHealthStatus('✗ ' + err.message);
+    }
+    setSyncing(null);
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
@@ -238,6 +258,71 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
           {garminStatus}
         </div>
       )}
+
+      {/* Apple Health */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitle}>Apple Health</h2>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '14px' }}>
+          <StatusDot connected={!!settings.apple_health_webhook_token} />
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            {settings.apple_health_webhook_token
+              ? `Connected · Last sync: ${formatLastSync(settings.apple_health_last_sync)}`
+              : 'Not connected'}
+          </span>
+        </div>
+        {settings.apple_health_webhook_token || appleHealthWebhookUrl ? (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Copy this URL into the <strong style={{ color: 'var(--text-primary)' }}>Health Auto Export</strong> app
+              (free on the App Store). Set it as a REST API endpoint and choose HRV, Resting Heart Rate, Sleep Analysis,
+              Step Count, Active Energy, and Body Mass. Sync interval: every hour.
+            </p>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={labelStyle}>Webhook URL</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  readOnly
+                  value={appleHealthWebhookUrl || `${window.location.origin}/api/apple-health/webhook?token=${settings.apple_health_webhook_token}`}
+                  style={{ ...inputStyle, flex: 1, cursor: 'text', fontSize: '12px', fontFamily: 'monospace' }}
+                  onFocus={e => e.target.select()}
+                />
+                <button
+                  onClick={() => {
+                    const url = appleHealthWebhookUrl || `${window.location.origin}/api/apple-health/webhook?token=${settings.apple_health_webhook_token}`;
+                    navigator.clipboard.writeText(url);
+                    setAppleHealthStatus('✓ Copied!');
+                    setTimeout(() => setAppleHealthStatus(''), 2000);
+                  }}
+                  style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', whiteSpace: 'nowrap' }}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            {appleHealthStatus && (
+              <p style={{ fontSize: '13px', color: appleHealthStatus.startsWith('✓') ? '#22C55E' : '#FF4444', margin: '0 0 8px' }}>{appleHealthStatus}</p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Connect Apple Health via the <strong style={{ color: 'var(--text-primary)' }}>Health Auto Export</strong> app.
+              Your Garmin data syncs to Apple Health automatically — this pulls HRV, sleep, resting HR, steps, and calories
+              without requiring your Garmin password.
+            </p>
+            {appleHealthStatus && (
+              <p style={{ fontSize: '13px', color: '#FF4444', margin: '0 0 8px' }}>{appleHealthStatus}</p>
+            )}
+            <button
+              onClick={setupAppleHealth}
+              disabled={syncing === 'apple-health-setup'}
+              style={{ minHeight: '44px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '8px', padding: '0 20px', fontSize: '13px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: 'pointer' }}
+            >
+              {syncing === 'apple-health-setup' ? 'Generating...' : 'Generate Webhook URL'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Garmin */}
       <div style={sectionStyle}>
