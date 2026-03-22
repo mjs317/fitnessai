@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { getCronUser } from '@/lib/cron-auth';
 import { format, subDays } from 'date-fns';
 
 async function refreshWithingsToken(serviceSupabase: any, userId: string, refreshToken: string) {
@@ -33,8 +34,7 @@ async function refreshWithingsToken(serviceSupabase: any, userId: string, refres
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCronUser(request, 'withings_access_token');
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const serviceSupabase = await createServiceRoleClient();
@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Withings not connected' });
     }
 
-    // Refresh token if expired
+    // Refresh token if expired or expiry is unknown
     let accessToken = settings.withings_access_token;
-    if (settings.withings_token_expires_at && new Date(settings.withings_token_expires_at) < new Date()) {
+    if (!settings.withings_token_expires_at || new Date(settings.withings_token_expires_at) < new Date()) {
       accessToken = await refreshWithingsToken(serviceSupabase, user.id, settings.withings_refresh_token);
     }
 

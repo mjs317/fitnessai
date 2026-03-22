@@ -11,9 +11,12 @@ import { createClient } from '@/lib/supabase/client';
 interface HealthMetrics {
   hrv: number | null;
   sleep_score: number | null;
+  sleep_hours: number | null;
   body_battery_start: number | null;
   resting_hr: number | null;
   weight_lbs: number | null;
+  steps: number | null;
+  active_calories: number | null;
   date: string;
 }
 
@@ -38,6 +41,52 @@ interface TodayClientProps {
   initialNutrition: NutritionTotals;
   initialAIBrief: { verdict: 'PUSH' | 'MAINTAIN' | 'RECOVER' | null; content: string | null } | null;
   goals: UserGoals;
+}
+
+function GettingStartedBanner() {
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--accent)',
+      borderRadius: '12px',
+      padding: '20px',
+      marginBottom: '16px',
+    }}>
+      <p style={{
+        fontFamily: 'Space Grotesk, sans-serif',
+        fontWeight: 700,
+        fontSize: '15px',
+        color: 'var(--text-primary)',
+        margin: '0 0 14px',
+      }}>👋 Welcome! Connect your devices to get started</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+        {[
+          'Go to Settings → connect Garmin or Withings',
+          'Run your first sync',
+          'Your metrics will appear here automatically each morning',
+        ].map((step, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <div style={{
+              width: '20px', height: '20px', borderRadius: '50%',
+              border: '1.5px solid var(--border)',
+              flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '11px', color: 'var(--text-dim)',
+              fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+            }}>{i + 1}</div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{step}</span>
+          </div>
+        ))}
+      </div>
+      <a href="/settings" style={{
+        color: 'var(--accent)',
+        fontSize: '13px',
+        fontFamily: 'Space Grotesk, sans-serif',
+        fontWeight: 700,
+        textDecoration: 'none',
+      }}>Go to Settings →</a>
+    </div>
+  );
 }
 
 function MacroBar({ label, current, goal, color }: { label: string; current: number; goal: number; color: string }) {
@@ -166,6 +215,12 @@ export default function TodayClient({
   const pendingWorkouts = workouts.filter(w => w.status === 'pending');
   const completedWorkouts = workouts.filter(w => w.status === 'completed' || w.status === 'auto-completed');
 
+  const isNewUser =
+    !metrics &&
+    workouts.length === 0 &&
+    nutrition.calories === 0 &&
+    nutrition.protein_g === 0;
+
   return (
     <div style={{ padding: '20px 16px', maxWidth: '800px', margin: '0 auto' }}>
       {/* Header */}
@@ -186,6 +241,8 @@ export default function TodayClient({
           margin: 0,
         }}>{today}</h1>
       </div>
+
+      {isNewUser && <GettingStartedBanner />}
 
       {/* Metric Rings */}
       <div style={{
@@ -223,49 +280,37 @@ export default function TodayClient({
           />
         </div>
         {/* Secondary metrics */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          paddingTop: '12px',
-          borderTop: '1px solid var(--border)',
-        }}>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{
-              fontFamily: 'Space Grotesk, sans-serif',
-              fontWeight: 700,
-              fontSize: '20px',
-              color: 'var(--text-primary)',
-            }}>
-              {metrics?.weight_lbs ? `${metrics.weight_lbs.toFixed(1)}` : '—'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>LBS</div>
-          </div>
-          <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-            <div style={{
-              fontFamily: 'Space Grotesk, sans-serif',
-              fontWeight: 700,
-              fontSize: '20px',
-              color: 'var(--text-primary)',
-            }}>
-              {metrics?.resting_hr ?? '—'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>RHR</div>
-          </div>
-          {metrics && (
-            <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-              <div style={{
-                fontFamily: 'Space Grotesk, sans-serif',
-                fontWeight: 500,
-                fontSize: '11px',
-                color: 'var(--text-dim)',
-              }}>
-                Last sync
+        <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+          {/* Row 1: Weight | RHR | Steps */}
+          <div style={{ display: 'flex', gap: '0', marginBottom: '10px' }}>
+            {[
+              { value: metrics?.weight_lbs ? metrics.weight_lbs.toFixed(1) : '—', label: 'LBS' },
+              { value: metrics?.resting_hr ?? '—', label: 'RHR' },
+              { value: metrics?.steps ? metrics.steps.toLocaleString() : '—', label: 'STEPS' },
+            ].map((item, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center', borderLeft: i > 0 ? '1px solid var(--border)' : undefined }}>
+                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)' }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>{item.label}</div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>
-                {format(new Date(metrics.date), 'MMM d')}
+            ))}
+          </div>
+          {/* Row 2: Active Cal | Sleep Hours | Last sync */}
+          <div style={{ display: 'flex', gap: '0' }}>
+            {[
+              { value: metrics?.active_calories ? metrics.active_calories.toLocaleString() : '—', label: 'ACTIVE CAL' },
+              { value: metrics?.sleep_hours ? `${metrics.sleep_hours}h` : '—', label: 'SLEEP' },
+              { value: metrics ? format(new Date(metrics.date), 'MMM d') : '—', label: 'LAST SYNC' },
+            ].map((item, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center', borderLeft: i > 0 ? '1px solid var(--border)' : undefined }}>
+                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)' }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>{item.label}</div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
 

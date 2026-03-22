@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAnthropicClient } from '@/lib/ai/client';
+import { getAnthropicClient, CLAUDE_MODEL } from '@/lib/ai/client';
 import { TRAINING_PLAN_SYSTEM } from '@/lib/ai/prompts';
 import { format, differenceInWeeks, parseISO } from 'date-fns';
 
@@ -56,7 +56,7 @@ Return ONLY valid JSON in this exact schema (no extra text, no markdown):
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 8000,
       system: TRAINING_PLAN_SYSTEM,
       messages: [{ role: 'user', content: prompt }],

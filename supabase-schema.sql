@@ -36,12 +36,17 @@ CREATE TABLE IF NOT EXISTS user_settings (
   -- Withings OAuth tokens
   withings_access_token       TEXT,
   withings_refresh_token      TEXT,
-  withings_token_expiry       TIMESTAMPTZ,
+  withings_token_expires_at   TIMESTAMPTZ,
   withings_user_id            TEXT,
+  withings_last_sync          TIMESTAMPTZ,
 
   -- TrainingPeaks
   trainingpeaks_ics_url       TEXT,
   trainingpeaks_last_sync     TIMESTAMPTZ,
+
+  -- Apple Health (via Health Auto Export webhook)
+  apple_health_webhook_token  TEXT UNIQUE,
+  apple_health_last_sync      TIMESTAMPTZ,
 
   -- Preferences
   timezone                    TEXT DEFAULT 'America/New_York',
@@ -266,15 +271,16 @@ CREATE TABLE IF NOT EXISTS ai_recommendations (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
 
-  date            DATE NOT NULL,
-  type            TEXT NOT NULL DEFAULT 'daily_brief',  -- 'daily_brief'|'nutrition_advice'
-  verdict         TEXT,                                  -- 'PUSH'|'MAINTAIN'|'RECOVER'
-  content         TEXT NOT NULL,
-  model           TEXT DEFAULT 'claude-sonnet-4-20250514',
+  date                  DATE NOT NULL,
+  recommendation_type   TEXT NOT NULL DEFAULT 'daily_brief',  -- 'daily_brief'|'nutrition_advice'
+  verdict               TEXT,                                  -- 'PUSH'|'MAINTAIN'|'RECOVER'
+  content               TEXT NOT NULL,
+  data_snapshot         JSONB,
+  model                 TEXT DEFAULT 'claude-sonnet-4-6',
 
-  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
 
-  UNIQUE(user_id, date, type)
+  UNIQUE(user_id, date, recommendation_type)
 );
 
 -- ============================================================
@@ -389,20 +395,20 @@ CREATE INDEX IF NOT EXISTS idx_ai_recommendations_user_date
 -- ============================================================
 
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('workout-screenshots', 'workout-screenshots', false)
+VALUES ('workout-images', 'workout-images', false)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE POLICY "Users upload own screenshots"
   ON storage.objects FOR INSERT
-  WITH CHECK (bucket_id = 'workout-screenshots' AND auth.uid()::text = (storage.foldername(name))[1]);
+  WITH CHECK (bucket_id = 'workout-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 CREATE POLICY "Users read own screenshots"
   ON storage.objects FOR SELECT
-  USING (bucket_id = 'workout-screenshots' AND auth.uid()::text = (storage.foldername(name))[1]);
+  USING (bucket_id = 'workout-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 CREATE POLICY "Users delete own screenshots"
   ON storage.objects FOR DELETE
-  USING (bucket_id = 'workout-screenshots' AND auth.uid()::text = (storage.foldername(name))[1]);
+  USING (bucket_id = 'workout-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- ============================================================
 -- Done! Schema ready.

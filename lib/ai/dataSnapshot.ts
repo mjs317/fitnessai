@@ -56,7 +56,7 @@ export async function buildCoachingSnapshot(userId: string, date: string): Promi
   const [metrics7dRes, todayScheduleRes, recentLogsRes, nutritionTodayRes, nutritionYestRes, settingsRes] = await Promise.allSettled([
     supabase
       .from('health_metrics')
-      .select('date, hrv, sleep_score, body_battery_start, resting_hr, weight_lbs, training_load')
+      .select('date, hrv, sleep_score, sleep_hours, body_battery_start, resting_hr, weight_lbs, steps, active_calories, training_load')
       .eq('user_id', userId)
       .gte('date', sevenDaysAgo)
       .lte('date', date)
@@ -146,7 +146,11 @@ export async function buildCoachingSnapshot(userId: string, date: string): Promi
         avg7d: avg7dHrv,
       },
       sleep: {
-        value: todayMetrics?.sleep_score ? `${todayMetrics.sleep_score}/100` : 'no data',
+        value: todayMetrics?.sleep_score
+          ? `${todayMetrics.sleep_score}/100`
+          : todayMetrics?.sleep_hours
+          ? `${todayMetrics.sleep_hours}h`
+          : 'no data',
         direction: sleepTrend.direction,
         avg7d: avg7dSleep,
       },

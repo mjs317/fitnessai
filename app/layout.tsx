@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
 
 export const metadata: Metadata = {
   title: 'Fitness Coach',
@@ -36,7 +37,10 @@ export default function RootLayout({
         />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <ServiceWorkerRegistration />
+        {children}
+      </body>
     </html>
   );
 }

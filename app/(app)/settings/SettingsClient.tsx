@@ -59,14 +59,35 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
   const supabase = createClient();
 
   const [settings, setSettings] = useState(initialSettings);
+  const [appleHealthWebhookUrl, setAppleHealthWebhookUrl] = useState('');
+  const [appleHealthStatus, setAppleHealthStatus] = useState('');
+  const [appleHealthLastSync, setAppleHealthLastSync] = useState<string | null>(
+    initialSettings.apple_health_last_sync ?? null
+  );
   const [garminEmail, setGarminEmail] = useState(initialSettings.garmin_email || '');
   const [garminPassword, setGarminPassword] = useState('');
   const [garminStatus, setGarminStatus] = useState('');
+  const [garminMfaPending, setGarminMfaPending] = useState(false);
+  const [garminMfaCode, setGarminMfaCode] = useState('');
   const [tpUrl, setTpUrl] = useState(initialSettings.trainingpeaks_ics_url || '');
   const [tpStatus, setTpStatus] = useState('');
   const [syncing, setSyncing] = useState<string | null>(null);
   const [historicalProgress, setHistoricalProgress] = useState<{ day: number; total: number; imported: number } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+
+  // Check Apple Health connection status from DB on mount (bypasses SSR cache)
+  useEffect(() => {
+    fetch('/api/apple-health/setup')
+      .then(r => r.json())
+      .then(data => {
+        if (data.connected) {
+          setAppleHealthWebhookUrl(data.webhookUrl);
+          setSettings(s => ({ ...s, apple_health_webhook_token: 'connected' }));
+          if (data.lastSync) setAppleHealthLastSync(data.lastSync);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Show Withings connection status from URL params
   useEffect(() => {
@@ -89,8 +110,36 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
         setGarminPassword('');
         setSettings(s => ({ ...s, garmin_email: garminEmail }));
         setGarminStatus('✓ Garmin credentials saved and connection verified');
+      } else if (data.requires_mfa) {
+        setGarminMfaPending(true);
+        setGarminPassword('');
+        setGarminStatus('');
       } else {
         setGarminStatus('✗ ' + (data.error || 'Save failed'));
+      }
+    } catch (err: any) {
+      setGarminStatus('✗ ' + err.message);
+    }
+    setSyncing(null);
+  };
+
+  const verifyGarminMfa = async () => {
+    if (!garminMfaCode.trim()) return;
+    setSyncing('garmin-mfa');
+    try {
+      const res = await fetch('/api/garmin/credentials/verify-mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: garminEmail, mfa_code: garminMfaCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGarminMfaPending(false);
+        setGarminMfaCode('');
+        setSettings(s => ({ ...s, garmin_email: garminEmail }));
+        setGarminStatus('✓ Garmin connected with 2FA');
+      } else {
+        setGarminStatus('✗ ' + (data.error || 'Invalid code'));
       }
     } catch (err: any) {
       setGarminStatus('✗ ' + err.message);
@@ -173,6 +222,24 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
     setSyncing(null);
   };
 
+  const setupAppleHealth = async () => {
+    setSyncing('apple-health-setup');
+    try {
+      const res = await fetch('/api/apple-health/setup', { method: 'POST' });
+      const data = await res.json();
+      if (data.webhookUrl) {
+        setAppleHealthWebhookUrl(data.webhookUrl);
+        setSettings(s => ({ ...s, apple_health_webhook_token: 'connected' }));
+        setAppleHealthStatus('');
+      } else {
+        setAppleHealthStatus('✗ Setup failed');
+      }
+    } catch (err: any) {
+      setAppleHealthStatus('✗ ' + err.message);
+    }
+    setSyncing(null);
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
@@ -209,6 +276,71 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
         </div>
       )}
 
+      {/* Apple Health */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitle}>Apple Health</h2>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '14px' }}>
+          <StatusDot connected={!!settings.apple_health_webhook_token} />
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            {settings.apple_health_webhook_token
+              ? `Connected · Last sync: ${formatLastSync(appleHealthLastSync)}`
+              : 'Not connected'}
+          </span>
+        </div>
+        {settings.apple_health_webhook_token || appleHealthWebhookUrl ? (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Copy this URL into the <strong style={{ color: 'var(--text-primary)' }}>Health Auto Export</strong> app
+              (free on the App Store). Set it as a REST API endpoint and choose HRV, Resting Heart Rate, Sleep Analysis,
+              Step Count, Active Energy, and Body Mass. Sync interval: every hour.
+            </p>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={labelStyle}>Webhook URL</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  readOnly
+                  value={appleHealthWebhookUrl || `${window.location.origin}/api/apple-health/webhook?token=${settings.apple_health_webhook_token}`}
+                  style={{ ...inputStyle, flex: 1, cursor: 'text', fontSize: '12px', fontFamily: 'monospace' }}
+                  onFocus={e => e.target.select()}
+                />
+                <button
+                  onClick={() => {
+                    const url = appleHealthWebhookUrl || `${window.location.origin}/api/apple-health/webhook?token=${settings.apple_health_webhook_token}`;
+                    navigator.clipboard.writeText(url);
+                    setAppleHealthStatus('✓ Copied!');
+                    setTimeout(() => setAppleHealthStatus(''), 2000);
+                  }}
+                  style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', whiteSpace: 'nowrap' }}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            {appleHealthStatus && (
+              <p style={{ fontSize: '13px', color: appleHealthStatus.startsWith('✓') ? '#22C55E' : '#FF4444', margin: '0 0 8px' }}>{appleHealthStatus}</p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Connect Apple Health via the <strong style={{ color: 'var(--text-primary)' }}>Health Auto Export</strong> app.
+              Your Garmin data syncs to Apple Health automatically — this pulls HRV, sleep, resting HR, steps, and calories
+              without requiring your Garmin password.
+            </p>
+            {appleHealthStatus && (
+              <p style={{ fontSize: '13px', color: '#FF4444', margin: '0 0 8px' }}>{appleHealthStatus}</p>
+            )}
+            <button
+              onClick={setupAppleHealth}
+              disabled={syncing === 'apple-health-setup'}
+              style={{ minHeight: '44px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '8px', padding: '0 20px', fontSize: '13px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: 'pointer' }}
+            >
+              {syncing === 'apple-health-setup' ? 'Generating...' : 'Generate Webhook URL'}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Garmin */}
       <div style={sectionStyle}>
         <h2 style={sectionTitle}>Garmin Connect</h2>
@@ -218,29 +350,63 @@ function SettingsInner({ userEmail, initialSettings }: SettingsProps) {
             {settings.garmin_email ? `${settings.garmin_email} · Last sync: ${formatLastSync(settings.garmin_last_sync)}` : 'Not connected'}
           </span>
         </div>
-        <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
-          <div>
-            <label style={labelStyle}>Email</label>
-            <input type="email" value={garminEmail} onChange={e => setGarminEmail(e.target.value)} style={inputStyle} placeholder="garmin@email.com" autoComplete="off" />
+        {garminMfaPending ? (
+          <div style={{ marginBottom: '12px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Garmin sent a verification code to your email.
+            </p>
+            <div>
+              <label style={labelStyle}>Enter 6-digit code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                value={garminMfaCode}
+                onChange={e => setGarminMfaCode(e.target.value.replace(/\D/g, ''))}
+                style={inputStyle}
+                placeholder="123456"
+                autoComplete="one-time-code"
+              />
+            </div>
           </div>
-          <div>
-            <label style={labelStyle}>Password (encrypted at rest)</label>
-            <input type="password" value={garminPassword} onChange={e => setGarminPassword(e.target.value)} style={inputStyle} placeholder="••••••••" autoComplete="new-password" />
+        ) : (
+          <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input type="email" value={garminEmail} onChange={e => setGarminEmail(e.target.value)} style={inputStyle} placeholder="garmin@email.com" autoComplete="off" />
+            </div>
+            <div>
+              <label style={labelStyle}>Password (encrypted at rest)</label>
+              <input type="password" value={garminPassword} onChange={e => setGarminPassword(e.target.value)} style={inputStyle} placeholder="••••••••" autoComplete="new-password" />
+            </div>
           </div>
-        </div>
+        )}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button onClick={saveGarminCredentials} disabled={!garminEmail || !garminPassword || syncing === 'garmin-save'} style={{ flex: 1, minHeight: '44px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: (!garminEmail || !garminPassword) ? 'not-allowed' : 'pointer', opacity: (!garminEmail || !garminPassword) ? 0.5 : 1 }}>
-            {syncing === 'garmin-save' ? 'Saving...' : 'Save Credentials'}
-          </button>
-          {settings.garmin_email && (
+          {garminMfaPending ? (
             <>
-              <button onClick={() => syncNow('garmin')} disabled={!!syncing} style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: syncing === 'garmin' ? 'var(--accent)' : 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif' }}>
-                <RefreshCw size={13} /> {syncing === 'garmin' ? 'Syncing...' : 'Sync Now'}
+              <button onClick={verifyGarminMfa} disabled={!garminMfaCode || syncing === 'garmin-mfa'} style={{ flex: 1, minHeight: '44px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: !garminMfaCode ? 'not-allowed' : 'pointer', opacity: !garminMfaCode ? 0.5 : 1 }}>
+                {syncing === 'garmin-mfa' ? 'Verifying...' : 'Verify Code'}
               </button>
-              {!settings.garmin_historical_seeded && (
-                <button onClick={importHistory} disabled={!!syncing} style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif' }}>
-                  {syncing === 'historical' ? 'Importing...' : 'Import 90-Day History'}
-                </button>
+              <button onClick={() => { setGarminMfaPending(false); setGarminMfaCode(''); }} style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif' }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={saveGarminCredentials} disabled={!garminEmail || !garminPassword || syncing === 'garmin-save'} style={{ flex: 1, minHeight: '44px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: (!garminEmail || !garminPassword) ? 'not-allowed' : 'pointer', opacity: (!garminEmail || !garminPassword) ? 0.5 : 1 }}>
+                {syncing === 'garmin-save' ? 'Saving...' : 'Save Credentials'}
+              </button>
+              {settings.garmin_email && (
+                <>
+                  <button onClick={() => syncNow('garmin')} disabled={!!syncing} style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: syncing === 'garmin' ? 'var(--accent)' : 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif' }}>
+                    <RefreshCw size={13} /> {syncing === 'garmin' ? 'Syncing...' : 'Sync Now'}
+                  </button>
+                  {!settings.garmin_historical_seeded && (
+                    <button onClick={importHistory} disabled={!!syncing} style={{ minHeight: '44px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 14px', color: 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif' }}>
+                      {syncing === 'historical' ? 'Importing...' : 'Import 90-Day History'}
+                    </button>
+                  )}
+                </>
               )}
             </>
           )}
