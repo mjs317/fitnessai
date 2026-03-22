@@ -10,7 +10,7 @@ export default async function TrainingPage() {
 
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
-  const weekEnd = addDays(weekStart, 13); // 2 weeks
+  const weekEnd = addDays(weekStart, 55); // 8 weeks
 
   const [scheduledRes, plansRes] = await Promise.allSettled([
     supabase

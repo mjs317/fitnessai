@@ -53,14 +53,41 @@ const typeEmoji: Record<string, string> = {
   run: '🏃', bike: '🚴', swim: '🏊', strength: '💪', crossfit: '🏋️', hyrox: '⚡', mixed: '🔥', rest: '😴',
 };
 
+function getInitialWeekOffset(scheduled: ScheduledWorkout[], weekStartStr: string, todayStr: string): number {
+  // If there are workouts in the first 2 weeks, start at 0
+  const base = parseISO(weekStartStr);
+  const in2Weeks = scheduled.some(w => {
+    const d = w.scheduled_date;
+    return d >= weekStartStr && d <= format(addDays(base, 13), 'yyyy-MM-dd');
+  });
+  if (in2Weeks) return 0;
+
+  // Find the week offset of the first upcoming workout
+  const upcoming = scheduled
+    .filter(w => w.scheduled_date >= todayStr)
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+  if (!upcoming.length) return 0;
+
+  const firstDate = parseISO(upcoming[0].scheduled_date);
+  const diffMs = firstDate.getTime() - base.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  return Math.max(0, Math.floor(diffDays / 7));
+}
+
 export default function TrainingClient({ initialScheduled, plans, todayStr, weekStartStr }: TrainingClientProps) {
   const router = useRouter();
   const [view, setView] = useState<'week' | 'list'>('week');
   const [selected, setSelected] = useState<ScheduledWorkout | null>(null);
   const [scheduled, setScheduled] = useState(initialScheduled);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(() => getInitialWeekOffset(initialScheduled, weekStartStr, todayStr));
 
-  const weekDays = Array.from({ length: 14 }, (_, i) => addDays(parseISO(weekStartStr), i));
+  // 14 days starting from the viewed week
+  const viewStart = addDays(parseISO(weekStartStr), weekOffset * 7);
+  const weekDays = Array.from({ length: 14 }, (_, i) => addDays(viewStart, i));
+  const viewStartStr = format(viewStart, 'yyyy-MM-dd');
+  const viewEndStr = format(addDays(viewStart, 13), 'yyyy-MM-dd');
+  const canGoBack = weekOffset > 0;
 
   const getWorkoutsForDay = (date: Date) =>
     scheduled.filter(w => w.scheduled_date === format(date, 'yyyy-MM-dd'));
@@ -103,6 +130,27 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
           <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />
         </div>
       ))}
+
+      {/* Week navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <button
+          onClick={() => setWeekOffset(o => Math.max(0, o - 1))}
+          disabled={!canGoBack}
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 12px', color: canGoBack ? 'var(--text-primary)' : 'var(--text-muted)', cursor: canGoBack ? 'pointer' : 'default', fontFamily: 'Space Grotesk, sans-serif', fontSize: '13px', opacity: canGoBack ? 1 : 0.4 }}
+        >
+          ← Prev
+        </button>
+        <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: '13px', color: 'var(--text-muted)' }}>
+          {format(viewStart, 'MMM d')} – {format(addDays(viewStart, 13), 'MMM d, yyyy')}
+          {weekOffset === 0 && <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>· This week</span>}
+        </span>
+        <button
+          onClick={() => setWeekOffset(o => o + 1)}
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 12px', color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'Space Grotesk, sans-serif', fontSize: '13px' }}
+        >
+          Next →
+        </button>
+      </div>
 
       {/* Week view */}
       {view === 'week' && (
@@ -217,7 +265,7 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
               </div>
             );
           })}
-          {scheduled.length === 0 && (
+          {weekDays.every(d => getWorkoutsForDay(d).length === 0) && (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: '40px', marginBottom: '12px' }}>📅</div>
               <p style={{ fontSize: '15px', marginBottom: '16px' }}>No workouts scheduled yet.</p>
