@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     const gc = new GarminConnect({ username: email, password });
 
     // Capture MFA form state if Garmin requires 2FA
-    let capturedMfa: { formUrl: string; csrf: string; jarJson: string } | null = null;
+    interface MfaState { formUrl: string; csrf: string; jarJson: string }
+    let capturedMfa: MfaState | null = null;
 
     (gc as any).client.handleMFA = async function (htmlStr: string) {
       const actionMatch =
