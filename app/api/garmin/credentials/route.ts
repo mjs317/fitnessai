@@ -11,38 +11,66 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json();
     if (!email || !password) return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
 
+    const encryptedPw = encrypt(password);
+    const serviceSupabase = await createServiceRoleClient();
+
+    // Always save credentials first so verify-mfa can retrieve them
+    await serviceSupabase.from('user_settings').upsert({
+      user_id: user.id,
+      garmin_email: email,
+      garmin_password_encrypted: encryptedPw,
+      garmin_session_cookies: null,
+      updated_at: new Date().toISOString(),
+    });
+
+    const { GarminConnect } = await import('garmin-connect');
+    const gc = new GarminConnect({ username: email, password });
+
+    // Capture MFA form state if Garmin requires 2FA
+    let capturedMfa: { formUrl: string; csrf: string; jarJson: string } | null = null;
+
+    (gc as any).client.handleMFA = async function (htmlStr: string) {
+      const actionMatch =
+        htmlStr.match(/action="([^"]*verif[^"]*)"/i) ||
+        htmlStr.match(/action="([^"]*mfa[^"]*)"/i) ||
+        htmlStr.match(/<form[^>]+action="([^"]+)"/i);
+      let formUrl = actionMatch?.[1] ?? '';
+      if (formUrl && !formUrl.startsWith('http')) {
+        formUrl = 'https://sso.garmin.com' + formUrl;
+      }
+      const csrf = htmlStr.match(/name="_csrf"\s+value="([^"]+)"/i)?.[1] ?? '';
+      // Serialize the cookie jar at the MFA checkpoint — contains the active SSO session
+      const jar = (this.client as any)?.defaults?.jar;
+      const jarJson = jar?.toJSON ? JSON.stringify(jar.toJSON()) : '{}';
+      capturedMfa = { formUrl, csrf, jarJson };
+      console.log('[garmin/credentials] MFA required, captured form URL:', formUrl);
+      throw new Error('__MFA_CAPTURED__');
+    };
+
     try {
-      const { createGarminClient, getGarminSessionCookies } = await import('@/lib/garmin/client');
-      const encryptedPw = encrypt(password);
-      const gc = await createGarminClient(email, encryptedPw);
+      await gc.login();
 
-      // Serialize session cookies so future syncs skip the login round-trip
+      // Login succeeded without MFA — save session cookies
+      const { getGarminSessionCookies } = await import('@/lib/garmin/client');
       const cookiesJson = await getGarminSessionCookies(gc);
-
-      const serviceSupabase = await createServiceRoleClient();
       await serviceSupabase.from('user_settings').upsert({
         user_id: user.id,
-        garmin_email: email,
-        garmin_password_encrypted: encryptedPw,
         garmin_session_cookies: cookiesJson ? encrypt(cookiesJson) : null,
         updated_at: new Date().toISOString(),
       });
-
       return NextResponse.json({ success: true });
     } catch (loginErr: any) {
-      const isMfa = /mfa|ticket not found|verification/i.test(loginErr.message || '');
-      if (isMfa) {
-        // Save credentials (without session) so verify-mfa can retrieve them
-        const encryptedPw = encrypt(password);
-        const serviceSupabase = await createServiceRoleClient();
+      if (loginErr.message === '__MFA_CAPTURED__' && capturedMfa) {
+        // Save MFA checkpoint (form URL + SSO cookies) so verify-mfa can use them
+        const mfaPayload = JSON.stringify({ __mfa: true, ...capturedMfa });
         await serviceSupabase.from('user_settings').upsert({
           user_id: user.id,
-          garmin_email: email,
-          garmin_password_encrypted: encryptedPw,
+          garmin_session_cookies: encrypt(mfaPayload),
           updated_at: new Date().toISOString(),
         });
         return NextResponse.json({ success: false, requires_mfa: true });
       }
+      console.error('[garmin/credentials] Login error:', loginErr.message);
       return NextResponse.json({ success: false, error: 'Login failed: ' + loginErr.message });
     }
   } catch (err: any) {
