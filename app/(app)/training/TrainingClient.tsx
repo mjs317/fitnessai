@@ -14,8 +14,7 @@ interface ScheduledWorkout {
   source: string;
   external_title: string | null;
   external_type: string | null;
-  external_description: string | null;
-  garmin_workout_id: string | null;
+  external_notes: string | null;
   workouts: { id: string; name: string; type: string; estimated_duration_min: number | null } | null;
 }
 
@@ -297,9 +296,9 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
               <button onClick={() => setSelected(null)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}>×</button>
             </div>
 
-            {selected.external_description && (
+            {selected.external_notes && (
               <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '16px', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                {selected.external_description.slice(0, 400)}{selected.external_description.length > 400 ? '...' : ''}
+                {selected.external_notes.slice(0, 400)}{selected.external_notes.length > 400 ? '...' : ''}
               </p>
             )}
 

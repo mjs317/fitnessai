@@ -16,8 +16,7 @@ export default async function TrainingPage() {
     supabase
       .from('scheduled_workouts')
       .select(`
-        id, scheduled_date, status, source, external_title, external_type, external_description,
-        garmin_workout_id,
+        id, scheduled_date, status, source, external_title, external_type, external_notes,
         workouts(id, name, type, estimated_duration_min)
       `)
       .eq('user_id', user.id)
