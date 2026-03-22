@@ -44,12 +44,14 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[garmin/verify-mfa] Using saved MFA checkpoint:', parsed.formUrl);
+    console.log('[garmin/verify-mfa] Cookie header length:', (parsed.cookieHeader ?? '').length);
     const gc = await createGarminClientWithMFA(
       email,
       settings.garmin_password_encrypted,
       parsed.formUrl,
       parsed.hiddenFields ?? {},
       mfa_code.trim(),
+      parsed.cookieHeader ?? '',
     );
 
     // Save OAuth tokens for future session restore

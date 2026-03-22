@@ -53,7 +53,7 @@ async function tryRestoreSession(gc: GarminConnect, savedJson: string): Promise<
 // so we can intercept the MFA page HTML and handle it ourselves.
 // handleMFA is called synchronously with its return ignored, so it cannot be used.
 
-type MfaState = { formUrl: string; hiddenFields: Record<string, string> };
+type MfaState = { formUrl: string; hiddenFields: Record<string, string>; cookieHeader: string };
 
 function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | null> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -127,8 +127,22 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
     if (!formUrl) formUrl = `${url.SIGNIN_URL}?${qs.stringify(signinParams)}`;
 
     const hiddenFields = extractHiddenFields(step3Html);
+
+    // Capture the SSO session cookies so verify-mfa can replay them.
+    // Without these Garmin returns 401 — the MFA submission must be part
+    // of the same session that submitted the credentials.
+    let cookieHeader = '';
+    try {
+      const jar = this.client?.defaults?.jar;
+      if (jar) {
+        cookieHeader = typeof jar.getCookieStringSync === 'function'
+          ? jar.getCookieStringSync('https://sso.garmin.com')
+          : '';
+      }
+    } catch { /* non-fatal */ }
     console.log('[garmin] MFA form URL:', formUrl, '| hidden fields:', Object.keys(hiddenFields).join(','));
-    capturedMfa = { formUrl, hiddenFields };
+    console.log('[garmin] Captured cookie header length:', cookieHeader.length);
+    capturedMfa = { formUrl, hiddenFields, cookieHeader };
     throw new Error('__MFA_REQUIRED__');
   };
 
@@ -204,6 +218,7 @@ export async function createGarminClientWithMFA(
   mfaFormUrl: string,
   mfaHiddenFields: Record<string, string>,
   mfaCode: string,
+  mfaCookieHeader?: string,
 ): Promise<GarminConnect> {
   const { decrypt } = await import('@/lib/crypto');
   const password = decrypt(encryptedPassword);
@@ -216,12 +231,15 @@ export async function createGarminClientWithMFA(
 
     const params: Record<string, string> = { ...mfaHiddenFields, verificationCode: mfaCode.trim() };
     const bodyStr = new URLSearchParams(params).toString();
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: 'https://sso.garmin.com',
       Referer: 'https://sso.garmin.com/sso/signin',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     };
+    // Replay the SSO session cookies from the credential POST so Garmin
+    // associates this MFA submission with the same session (prevents 401).
+    if (mfaCookieHeader) headers['Cookie'] = mfaCookieHeader;
 
     console.log('[garmin/mfa] Posting to:', mfaFormUrl);
     console.log('[garmin/mfa] Form fields:', Object.keys(params).join(','));
