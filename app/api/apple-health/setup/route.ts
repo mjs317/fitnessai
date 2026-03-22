@@ -19,10 +19,14 @@ export async function POST(_req: NextRequest) {
   let token = settings?.apple_health_webhook_token;
   if (!token) {
     token = randomBytes(24).toString('hex');
-    await serviceSupabase.from('user_settings').upsert(
+    const { error: upsertErr } = await serviceSupabase.from('user_settings').upsert(
       { user_id: user.id, apple_health_webhook_token: token, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     );
+    if (upsertErr) {
+      console.error('[apple-health/setup] Failed to save token:', upsertErr.message);
+      return NextResponse.json({ error: 'Failed to save webhook token: ' + upsertErr.message }, { status: 500 });
+    }
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://your-app.vercel.app';
