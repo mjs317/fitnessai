@@ -151,7 +151,6 @@ async function saveProgramToDb(userId: string, programData: ParsedProgram) {
     estimated_duration_min: w.duration_min,
     blocks: w.blocks,
     description: null,
-    source: 'program_import',
   }));
 
   const { data: insertedWorkouts, error: workoutsError } = await supabase
