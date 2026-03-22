@@ -211,10 +211,11 @@ export async function createGarminClientWithMFA(
   const httpClient = (gc as any).client;
 
   httpClient.getLoginTicket = async function (_u: string, _p: string) {
-    // Start with all hidden fields from the original form, then add the code
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const axios = require('axios');
+
     const params: Record<string, string> = { ...mfaHiddenFields, verificationCode: mfaCode.trim() };
     const bodyStr = new URLSearchParams(params).toString();
-
     const headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: 'https://sso.garmin.com',
@@ -225,38 +226,28 @@ export async function createGarminClientWithMFA(
     console.log('[garmin/mfa] Posting to:', mfaFormUrl);
     console.log('[garmin/mfa] Form fields:', Object.keys(params).join(','));
 
-    // First try: no redirect following — check the Location header for the ticket
-    // (Garmin may redirect to the service URL which contains the ticket)
-    let ticket: string | null = null;
-    try {
-      const rawRes = await this.client.post(mfaFormUrl, bodyStr, {
-        headers,
-        maxRedirects: 0,
-        validateStatus: (s: number) => s >= 200 && s < 400,
-      });
-      const location: string = rawRes.headers?.location ?? '';
-      const body: string = typeof rawRes.data === 'string' ? rawRes.data : '';
-      console.log('[garmin/mfa] Direct response status:', rawRes.status, '| Location:', location.slice(0, 200));
-      const ticketMatch = TICKET_RE.exec(location) || TICKET_RE.exec(body);
-      if (ticketMatch) ticket = ticketMatch[1];
-    } catch (e: any) {
-      console.warn('[garmin/mfa] Direct POST failed:', e.message);
+    // Use a plain axios instance (not the garmin-connect one) so we get the
+    // raw response object with headers. The HttpClient's interceptors strip
+    // everything to response.data, losing the Location header we need.
+    //
+    // After correct MFA Garmin responds with 302 → /sso/embed?ticket=ST-...
+    // The ticket is in the Location header, NOT the final body.
+    const rawAxios = axios.create({ maxRedirects: 0, validateStatus: (s: number) => s < 400 });
+    const res = await rawAxios.post(mfaFormUrl, bodyStr, { headers });
+
+    const location: string = res.headers?.location ?? '';
+    const body: string = typeof res.data === 'string' ? res.data : '';
+    console.log('[garmin/mfa] Response status:', res.status, '| Location:', location.slice(0, 200));
+    if (body) console.log('[garmin/mfa] Body snippet:', body.slice(0, 400));
+
+    const ticketMatch = TICKET_RE.exec(location) || TICKET_RE.exec(body);
+    if (ticketMatch) {
+      console.log('[garmin/mfa] Got ticket, completing OAuth…');
+      return ticketMatch[1];
     }
 
-    // Second try: follow redirects and scan the final HTML body
-    if (!ticket) {
-      const mfaHtml: string = await this.post(mfaFormUrl, bodyStr, { headers });
-      const snippet = typeof mfaHtml === 'string' ? mfaHtml.slice(0, 800) : String(mfaHtml);
-      console.log('[garmin/mfa] Followed-redirect body snippet:', snippet);
-      const ticketMatch = TICKET_RE.exec(typeof mfaHtml === 'string' ? mfaHtml : '');
-      if (ticketMatch) ticket = ticketMatch[1];
-    }
-
-    if (!ticket) {
-      throw new Error('Invalid or expired verification code');
-    }
-    console.log('[garmin/mfa] Got ticket, completing OAuth…');
-    return ticket;
+    // 200 with a body means wrong/expired code or Garmin returned an error page
+    throw new Error('Invalid or expired verification code');
   };
 
   await gc.login();
