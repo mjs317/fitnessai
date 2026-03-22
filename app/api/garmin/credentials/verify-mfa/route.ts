@@ -33,10 +33,12 @@ export async function POST(request: NextRequest) {
     // Using the saved form URL avoids starting a new Garmin session, which
     // would send a second MFA email and invalidate the user's current code.
     // Use the MFA form state saved during the initial login.
-    // If no saved state exists this throws immediately — the user should
-    // click Cancel and reconnect so a fresh state is captured.
-    const raw = decrypt(settings.garmin_session_cookies ?? '');
-    const parsed = JSON.parse(raw || '{}');
+    // If no saved state exists the user should Cancel and reconnect.
+    if (!settings.garmin_session_cookies) {
+      throw new Error('MFA session expired — please click Cancel and reconnect Garmin to get a new code');
+    }
+    const raw = decrypt(settings.garmin_session_cookies);
+    const parsed = JSON.parse(raw);
     if (!parsed.__mfa || !parsed.formUrl) {
       throw new Error('MFA session expired — please click Cancel and reconnect Garmin to get a new code');
     }

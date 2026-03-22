@@ -107,8 +107,9 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
     const ticketMatch = TICKET_RE.exec(step3Html);
     if (ticketMatch) return ticketMatch[1];
 
-    // MFA required — log the HTML so we can see the exact form structure
-    console.log('[garmin] MFA page HTML (first 800):', step3Html.slice(0, 800));
+    // MFA required — extract form action and hidden fields
+    // Log a larger snippet so the form body is visible
+    console.log('[garmin] MFA page HTML (first 1500):', step3Html.slice(0, 1500));
 
     // Match action with double or single quotes; try several known path patterns then fall back
     const actionMatch =
@@ -122,8 +123,11 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
     formUrl = formUrl.replace(/&amp;/g, '&').replace(/&#x2F;/g, '/').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     if (formUrl && !formUrl.startsWith('http')) formUrl = 'https://sso.garmin.com' + formUrl;
 
+    // Garmin often uses action="" (empty = post to same URL as credential submit)
+    if (!formUrl) formUrl = `${url.SIGNIN_URL}?${qs.stringify(signinParams)}`;
+
     const hiddenFields = extractHiddenFields(step3Html);
-    console.log('[garmin] MFA form URL:', formUrl || '(not found)', '| hidden fields:', Object.keys(hiddenFields).join(','));
+    console.log('[garmin] MFA form URL:', formUrl, '| hidden fields:', Object.keys(hiddenFields).join(','));
     capturedMfa = { formUrl, hiddenFields };
     throw new Error('__MFA_REQUIRED__');
   };
