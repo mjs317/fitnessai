@@ -197,7 +197,7 @@ export async function loginWithMFADetection(
   password: string,
 ): Promise<
   | { type: 'success'; gc: GarminConnect }
-  | { type: 'mfa'; formUrl: string; hiddenFields: Record<string, string> }
+  | { type: 'mfa'; formUrl: string; hiddenFields: Record<string, string>; cookieHeader: string }
 > {
   const gc = new GarminConnect({ username: email, password });
   const mfaState = await patchGetLoginTicketForCapture(gc);
