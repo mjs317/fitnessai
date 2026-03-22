@@ -176,8 +176,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const byDate = parsePayload(body as { data?: { metrics?: Metric[] } });
+  const rawBody = body as { data?: { metrics?: Metric[] } };
+  const metricNames = rawBody?.data?.metrics?.map(m => m.name) ?? [];
+  console.log(`[apple-health/webhook] Received metrics: ${metricNames.join(', ')}`);
+  console.log(`[apple-health/webhook] Raw payload sample:`, JSON.stringify(rawBody?.data?.metrics?.slice(0, 2)));
+
+  const byDate = parsePayload(rawBody);
   const dates = Object.keys(byDate);
+  console.log(`[apple-health/webhook] Parsed dates: ${dates.join(', ')}`, JSON.stringify(byDate));
   if (dates.length === 0) return NextResponse.json({ imported: 0 });
 
   const rows = dates.map(date => ({
