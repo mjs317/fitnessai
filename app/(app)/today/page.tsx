@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 import TodayClient from './TodayClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function TodayPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -21,7 +23,7 @@ export default async function TodayPage() {
   ] = await Promise.allSettled([
     supabase
       .from('health_metrics')
-      .select('hrv, sleep_score, body_battery_start, resting_hr, weight_lbs, date')
+      .select('hrv, sleep_score, sleep_hours, body_battery_start, resting_hr, weight_lbs, steps, active_calories, date')
       .eq('user_id', user.id)
       .order('date', { ascending: false })
       .limit(1)

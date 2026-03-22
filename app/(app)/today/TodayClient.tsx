@@ -11,9 +11,12 @@ import { createClient } from '@/lib/supabase/client';
 interface HealthMetrics {
   hrv: number | null;
   sleep_score: number | null;
+  sleep_hours: number | null;
   body_battery_start: number | null;
   resting_hr: number | null;
   weight_lbs: number | null;
+  steps: number | null;
+  active_calories: number | null;
   date: string;
 }
 
@@ -277,49 +280,37 @@ export default function TodayClient({
           />
         </div>
         {/* Secondary metrics */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          paddingTop: '12px',
-          borderTop: '1px solid var(--border)',
-        }}>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{
-              fontFamily: 'Space Grotesk, sans-serif',
-              fontWeight: 700,
-              fontSize: '20px',
-              color: 'var(--text-primary)',
-            }}>
-              {metrics?.weight_lbs ? `${metrics.weight_lbs.toFixed(1)}` : '—'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>LBS</div>
-          </div>
-          <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-            <div style={{
-              fontFamily: 'Space Grotesk, sans-serif',
-              fontWeight: 700,
-              fontSize: '20px',
-              color: 'var(--text-primary)',
-            }}>
-              {metrics?.resting_hr ?? '—'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>RHR</div>
-          </div>
-          {metrics && (
-            <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-              <div style={{
-                fontFamily: 'Space Grotesk, sans-serif',
-                fontWeight: 500,
-                fontSize: '11px',
-                color: 'var(--text-dim)',
-              }}>
-                Last sync
+        <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+          {/* Row 1: Weight | RHR | Steps */}
+          <div style={{ display: 'flex', gap: '0', marginBottom: '10px' }}>
+            {[
+              { value: metrics?.weight_lbs ? metrics.weight_lbs.toFixed(1) : '—', label: 'LBS' },
+              { value: metrics?.resting_hr ?? '—', label: 'RHR' },
+              { value: metrics?.steps ? metrics.steps.toLocaleString() : '—', label: 'STEPS' },
+            ].map((item, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center', borderLeft: i > 0 ? '1px solid var(--border)' : undefined }}>
+                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)' }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>{item.label}</div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>
-                {format(new Date(metrics.date), 'MMM d')}
+            ))}
+          </div>
+          {/* Row 2: Active Cal | Sleep Hours | Last sync */}
+          <div style={{ display: 'flex', gap: '0' }}>
+            {[
+              { value: metrics?.active_calories ? metrics.active_calories.toLocaleString() : '—', label: 'ACTIVE CAL' },
+              { value: metrics?.sleep_hours ? `${metrics.sleep_hours}h` : '—', label: 'SLEEP' },
+              { value: metrics ? format(new Date(metrics.date), 'MMM d') : '—', label: 'LAST SYNC' },
+            ].map((item, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center', borderLeft: i > 0 ? '1px solid var(--border)' : undefined }}>
+                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)' }}>
+                  {item.value}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'Space Grotesk, sans-serif' }}>{item.label}</div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
 
