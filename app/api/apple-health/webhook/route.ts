@@ -8,9 +8,8 @@ function toDate(dateStr: string): string {
   return dateStr.slice(0, 10);
 }
 
-/** Values in sleep_analysis to exclude (InBed and Awake are not real sleep) */
+/** Values in sleep_analysis to exclude (Awake is not sleep; InBed counts for Garmin users) */
 const SLEEP_EXCLUDE = new Set([
-  'HKCategoryValueSleepAnalysisInBed',
   'HKCategoryValueSleepAnalysisAwake',
 ]);
 
