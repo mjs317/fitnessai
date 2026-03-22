@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
-import { getAnthropicClient } from '@/lib/ai/client';
+import { getAnthropicClient, CLAUDE_MODEL } from '@/lib/ai/client';
 import { DAILY_BRIEF_SYSTEM } from '@/lib/ai/prompts';
 import { buildCoachingSnapshot } from '@/lib/ai/dataSnapshot';
 import { format } from 'date-fns';
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const anthropic = getAnthropicClient();
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 600,
       system: DAILY_BRIEF_SYSTEM,
       messages: [{

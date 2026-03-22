@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropicClient, CLAUDE_MODEL } from '@/lib/ai/client';
 
 function genId() {
   return Math.random().toString(36).substring(2, 10);
@@ -10,10 +10,6 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
-  }
 
   const formData = await request.formData();
   const file = formData.get('image') as File;
@@ -30,7 +26,7 @@ export async function POST(request: NextRequest) {
     await supabase.storage.from('workout-images').upload(filename, file, { contentType: file.type });
 
     // Parse with Claude Vision
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const anthropic = getAnthropicClient();
 
     const prompt = `Extract this workout from the image. Return ONLY a valid JSON object with this exact schema:
 {
@@ -63,7 +59,7 @@ export async function POST(request: NextRequest) {
 Infer workout type from context. Return no commentary, no markdown, only the JSON.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 2000,
       messages: [{
         role: 'user',

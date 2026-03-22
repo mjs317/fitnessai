@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Withings not connected' });
     }
 
-    // Refresh token if expired
+    // Refresh token if expired or expiry is unknown
     let accessToken = settings.withings_access_token;
-    if (settings.withings_token_expires_at && new Date(settings.withings_token_expires_at) < new Date()) {
+    if (!settings.withings_token_expires_at || new Date(settings.withings_token_expires_at) < new Date()) {
       accessToken = await refreshWithingsToken(serviceSupabase, user.id, settings.withings_refresh_token);
     }
 
