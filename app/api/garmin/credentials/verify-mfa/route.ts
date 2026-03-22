@@ -32,48 +32,23 @@ export async function POST(request: NextRequest) {
     // Try to use the MFA form state saved during the initial login attempt.
     // Using the saved form URL avoids starting a new Garmin session, which
     // would send a second MFA email and invalidate the user's current code.
-    let gc;
-    if (settings.garmin_session_cookies) {
-      try {
-        const raw = decrypt(settings.garmin_session_cookies);
-        const parsed = JSON.parse(raw);
-        if (parsed.__mfa && parsed.formUrl) {
-          console.log('[garmin/verify-mfa] Using saved MFA checkpoint:', parsed.formUrl);
-          gc = await createGarminClientWithMFA(
-            email,
-            settings.garmin_password_encrypted,
-            parsed.formUrl,
-            parsed.csrf ?? '',
-            mfa_code.trim(),
-          );
-        }
-      } catch (e: any) {
-        console.error('[garmin/verify-mfa] Saved-state approach failed:', e.message);
-        // Fall through to retry below
-      }
+    // Use the MFA form state saved during the initial login.
+    // If no saved state exists this throws immediately — the user should
+    // click Cancel and reconnect so a fresh state is captured.
+    const raw = decrypt(settings.garmin_session_cookies ?? '');
+    const parsed = JSON.parse(raw || '{}');
+    if (!parsed.__mfa || !parsed.formUrl) {
+      throw new Error('MFA session expired — please click Cancel and reconnect Garmin to get a new code');
     }
 
-    if (!gc) {
-      // No saved form state (or it failed) — start a fresh login.
-      // NOTE: this will send Garmin another MFA email; the user should
-      // check for the newest code if this path is taken.
-      console.warn('[garmin/verify-mfa] No MFA checkpoint — falling back to fresh login');
-      const { loginWithMFADetection } = await import('@/lib/garmin/client');
-      let mfaFormUrl = '';
-      let mfaCsrf = '';
-      const detection = await loginWithMFADetection(email, decrypt(settings.garmin_password_encrypted));
-      if (detection.type === 'mfa') {
-        mfaFormUrl = detection.formUrl;
-        mfaCsrf = detection.csrf;
-      }
-      gc = await createGarminClientWithMFA(
-        email,
-        settings.garmin_password_encrypted,
-        mfaFormUrl,
-        mfaCsrf,
-        mfa_code.trim(),
-      );
-    }
+    console.log('[garmin/verify-mfa] Using saved MFA checkpoint:', parsed.formUrl);
+    const gc = await createGarminClientWithMFA(
+      email,
+      settings.garmin_password_encrypted,
+      parsed.formUrl,
+      parsed.csrf ?? '',
+      mfa_code.trim(),
+    );
 
     // Save OAuth tokens for future session restore
     const tokensJson = getGarminSessionCookies(gc);

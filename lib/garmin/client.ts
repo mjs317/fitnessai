@@ -98,6 +98,8 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
       step3Html.match(/action="([^"]*mfa[^"]*)"/i) ||
       step3Html.match(/<form[^>]+action="([^"]+)"/i);
     let formUrl = actionMatch?.[1] ?? '';
+    // HTML attributes encode & as &amp; — decode before using the URL
+    formUrl = formUrl.replace(/&amp;/g, '&').replace(/&#x2F;/g, '/').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     if (formUrl && !formUrl.startsWith('http')) formUrl = 'https://sso.garmin.com' + formUrl;
     const mfaCsrf = CSRF_RE.exec(step3Html)?.[1] ?? '';
 
