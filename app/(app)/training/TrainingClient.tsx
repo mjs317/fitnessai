@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format, addDays, parseISO, isSameDay, isToday, isPast } from 'date-fns';
-import { ChevronRight, Plus, Calendar, List, CheckCircle } from 'lucide-react';
+import { ChevronRight, Plus, Calendar, List, CheckCircle, Upload } from 'lucide-react';
+import ProgramImportModal from '@/components/programs/ProgramImportModal';
 
 interface ScheduledWorkout {
   id: string;
@@ -52,9 +54,11 @@ const typeEmoji: Record<string, string> = {
 };
 
 export default function TrainingClient({ initialScheduled, plans, todayStr, weekStartStr }: TrainingClientProps) {
+  const router = useRouter();
   const [view, setView] = useState<'week' | 'list'>('week');
   const [selected, setSelected] = useState<ScheduledWorkout | null>(null);
   const [scheduled, setScheduled] = useState(initialScheduled);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const weekDays = Array.from({ length: 14 }, (_, i) => addDays(parseISO(weekStartStr), i));
 
@@ -75,6 +79,12 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
           </button>
           <button onClick={() => setView('list')} style={{ background: view === 'list' ? 'var(--accent)' : 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px', color: view === 'list' ? '#0A0A0A' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <List size={14} />
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+          >
+            <Upload size={14} /> Import
           </button>
           <Link href="/training/generate" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent)', color: '#0A0A0A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, textDecoration: 'none' }}>
             <Plus size={14} /> Plan
@@ -218,6 +228,14 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
           )}
         </div>
       )}
+
+      {/* Program import modal */}
+      <ProgramImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => router.refresh()}
+        hasActivePlan={plans.some(p => p.is_active)}
+      />
 
       {/* Workout detail drawer */}
       {selected && (
