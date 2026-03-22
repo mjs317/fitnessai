@@ -107,19 +107,23 @@ function patchGetLoginTicketForCapture(gc: GarminConnect): Promise<MfaState | nu
     const ticketMatch = TICKET_RE.exec(step3Html);
     if (ticketMatch) return ticketMatch[1];
 
-    // MFA required — capture the form action URL and CSRF from the MFA page
+    // MFA required — log the HTML so we can see the exact form structure
+    console.log('[garmin] MFA page HTML (first 800):', step3Html.slice(0, 800));
+
+    // Match action with double or single quotes; try several known path patterns then fall back
     const actionMatch =
-      step3Html.match(/action="([^"]*verif[^"]*)"/i) ||
-      step3Html.match(/action="([^"]*mfa[^"]*)"/i) ||
-      step3Html.match(/<form[^>]+action="([^"]+)"/i);
+      step3Html.match(/action=["']([^"']*verif[^"']*)["']/i) ||
+      step3Html.match(/action=["']([^"']*mfa[^"']*)["']/i) ||
+      step3Html.match(/action=["']([^"']*2fa[^"']*)["']/i) ||
+      step3Html.match(/<form[^>]+action=["']([^"']+)["']/i) ||
+      step3Html.match(/action=["']([^"']+)["']/i);
     let formUrl = actionMatch?.[1] ?? '';
     // HTML attributes encode & as &amp; — decode before using the URL
     formUrl = formUrl.replace(/&amp;/g, '&').replace(/&#x2F;/g, '/').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     if (formUrl && !formUrl.startsWith('http')) formUrl = 'https://sso.garmin.com' + formUrl;
-    const mfaCsrf = CSRF_RE.exec(step3Html)?.[1] ?? '';
 
     const hiddenFields = extractHiddenFields(step3Html);
-    console.log('[garmin] MFA required — form URL:', formUrl || '(not found)', '| hidden fields:', Object.keys(hiddenFields).join(','));
+    console.log('[garmin] MFA form URL:', formUrl || '(not found)', '| hidden fields:', Object.keys(hiddenFields).join(','));
     capturedMfa = { formUrl, hiddenFields };
     throw new Error('__MFA_REQUIRED__');
   };
