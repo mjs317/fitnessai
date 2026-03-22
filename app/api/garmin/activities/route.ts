@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { getCronUser } from '@/lib/cron-auth';
 import { format, subDays } from 'date-fns';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCronUser(request, 'garmin_email');
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const serviceSupabase = await createServiceRoleClient();
 
     const { data: settings } = await serviceSupabase
       .from('user_settings')
-      .select('garmin_email, garmin_password_encrypted')
+      .select('garmin_email, garmin_password_encrypted, garmin_session_cookies')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -21,7 +21,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { createGarminClient, mapActivityType, mapToScheduledType } = await import('@/lib/garmin/client');
-    const gc = await createGarminClient(settings.garmin_email, settings.garmin_password_encrypted);
+    const gc = await createGarminClient(
+      settings.garmin_email,
+      settings.garmin_password_encrypted,
+      (settings as any).garmin_session_cookies,
+    );
 
     const startDate = subDays(new Date(), 7);
     const activities = await (gc as any).getActivities(0, 25); // Get last 25 activities

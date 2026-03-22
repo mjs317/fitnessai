@@ -40,6 +40,52 @@ interface TodayClientProps {
   goals: UserGoals;
 }
 
+function GettingStartedBanner() {
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--accent)',
+      borderRadius: '12px',
+      padding: '20px',
+      marginBottom: '16px',
+    }}>
+      <p style={{
+        fontFamily: 'Space Grotesk, sans-serif',
+        fontWeight: 700,
+        fontSize: '15px',
+        color: 'var(--text-primary)',
+        margin: '0 0 14px',
+      }}>👋 Welcome! Connect your devices to get started</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+        {[
+          'Go to Settings → connect Garmin or Withings',
+          'Run your first sync',
+          'Your metrics will appear here automatically each morning',
+        ].map((step, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <div style={{
+              width: '20px', height: '20px', borderRadius: '50%',
+              border: '1.5px solid var(--border)',
+              flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '11px', color: 'var(--text-dim)',
+              fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700,
+            }}>{i + 1}</div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{step}</span>
+          </div>
+        ))}
+      </div>
+      <a href="/settings" style={{
+        color: 'var(--accent)',
+        fontSize: '13px',
+        fontFamily: 'Space Grotesk, sans-serif',
+        fontWeight: 700,
+        textDecoration: 'none',
+      }}>Go to Settings →</a>
+    </div>
+  );
+}
+
 function MacroBar({ label, current, goal, color }: { label: string; current: number; goal: number; color: string }) {
   const pct = Math.min((current / goal) * 100, 100);
   return (
@@ -166,6 +212,12 @@ export default function TodayClient({
   const pendingWorkouts = workouts.filter(w => w.status === 'pending');
   const completedWorkouts = workouts.filter(w => w.status === 'completed' || w.status === 'auto-completed');
 
+  const isNewUser =
+    !metrics &&
+    workouts.length === 0 &&
+    nutrition.calories === 0 &&
+    nutrition.protein_g === 0;
+
   return (
     <div style={{ padding: '20px 16px', maxWidth: '800px', margin: '0 auto' }}>
       {/* Header */}
@@ -186,6 +238,8 @@ export default function TodayClient({
           margin: 0,
         }}>{today}</h1>
       </div>
+
+      {isNewUser && <GettingStartedBanner />}
 
       {/* Metric Rings */}
       <div style={{

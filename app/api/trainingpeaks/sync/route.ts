@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { getCronUser } from '@/lib/cron-auth';
 import { format, addDays } from 'date-fns';
 
 function parseICSDate(dtStr: string): Date | null {
@@ -58,8 +59,7 @@ function inferWorkoutType(summary: string, description: string): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCronUser(request, 'trainingpeaks_ics_url');
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const serviceSupabase = await createServiceRoleClient();

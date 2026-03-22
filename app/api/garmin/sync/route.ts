@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { getCronUser } from '@/lib/cron-auth';
 import { format } from 'date-fns';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // Auth check
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCronUser(request, 'garmin_email');
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const serviceSupabase = await createServiceRoleClient();
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
     // Get Garmin credentials from user_settings (server-side only)
     const { data: settings } = await serviceSupabase
       .from('user_settings')
-      .select('garmin_email, garmin_password_encrypted')
+      .select('garmin_email, garmin_password_encrypted, garmin_session_cookies')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -31,8 +30,22 @@ export async function GET(request: NextRequest) {
     // Import Garmin client (dynamic to avoid bundling issues)
     let gc: any;
     try {
-      const { createGarminClient } = await import('@/lib/garmin/client');
-      gc = await createGarminClient(settings.garmin_email, settings.garmin_password_encrypted);
+      const { createGarminClient, getGarminSessionCookies } = await import('@/lib/garmin/client');
+      gc = await createGarminClient(
+        settings.garmin_email,
+        settings.garmin_password_encrypted,
+        (settings as any).garmin_session_cookies,
+      );
+      // Persist refreshed session cookies
+      const { encrypt } = await import('@/lib/crypto');
+      const cookiesJson = await getGarminSessionCookies(gc);
+      if (cookiesJson) {
+        await serviceSupabase.from('user_settings').upsert({
+          user_id: user.id,
+          garmin_session_cookies: encrypt(cookiesJson),
+          updated_at: new Date().toISOString(),
+        });
+      }
     } catch (loginErr: any) {
       return NextResponse.json({
         success: false,
