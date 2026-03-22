@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       );
       // Persist refreshed session cookies
       const { encrypt } = await import('@/lib/crypto');
-      const cookiesJson = await getGarminSessionCookies(gc);
+      const cookiesJson = getGarminSessionCookies(gc);
       if (cookiesJson) {
         await serviceSupabase.from('user_settings').upsert({
           user_id: user.id,
