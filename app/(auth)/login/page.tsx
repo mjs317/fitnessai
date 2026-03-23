@@ -73,7 +73,7 @@ function LoginForm() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        emailRedirectTo: `${window.location.origin}/confirm`,
       },
     });
     if (error) setError(error.message);
@@ -88,7 +88,7 @@ function LoginForm() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        emailRedirectTo: `${window.location.origin}/confirm`,
       },
     });
     if (error) setError(error.message);
