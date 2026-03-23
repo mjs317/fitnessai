@@ -676,7 +676,12 @@ function PostWorkoutReview({
 
     if (scheduledWorkoutId) {
       await supabase.from('scheduled_workouts')
-        .update({ status: 'completed' })
+        .update({
+          status: 'completed',
+          rpe_score: rpe,
+          notes: notes.trim() || null,
+          completed_at: new Date().toISOString(),
+        })
         .eq('id', scheduledWorkoutId);
     }
 

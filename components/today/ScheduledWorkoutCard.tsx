@@ -11,7 +11,7 @@ interface ScheduledWorkout {
   status: string;
   source: string;
   external_title: string | null;
-  external_description: string | null;
+  external_notes: string | null;
   external_type: string | null;
   workouts?: {
     id: string;
@@ -111,7 +111,7 @@ export default function ScheduledWorkoutCard({ workout, onMarkDone }: ScheduledW
             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
               {workout.workout_id && (
                 <Link
-                  href={`/workouts/${workout.workout_id}/gym`}
+                  href={`/workouts/${workout.workout_id}/gym?scheduledId=${workout.id}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

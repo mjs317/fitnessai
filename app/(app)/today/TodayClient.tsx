@@ -36,6 +36,10 @@ export default function TodayClient({ initialWorkouts, todayStr }: TodayClientPr
   const [workouts, setWorkouts] = useState(initialWorkouts);
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [rpe, setRpe] = useState(7);
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
   const supabase = createClient();
 
   const dateLabel = format(parseISO(todayStr), 'EEEE, MMMM d');
@@ -45,9 +49,42 @@ export default function TodayClient({ initialWorkouts, todayStr }: TodayClientPr
   const getName = (w: ScheduledWorkout) => w.workouts?.name || w.external_title || 'Workout';
   const getType = (w: ScheduledWorkout) => w.workouts?.type || w.external_type || 'strength';
 
-  const handleMarkDone = async (id: string) => {
-    setWorkouts(prev => prev.map(w => w.id === id ? { ...w, status: 'completed' } : w));
-    await supabase.from('scheduled_workouts').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
+  const openMarkDone = (id: string) => {
+    setMarkingId(id);
+    setRpe(7);
+    setNotes('');
+  };
+
+  const handleMarkDone = async () => {
+    if (!markingId) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    const workout = workouts.find(w => w.id === markingId);
+
+    await supabase.from('scheduled_workouts').update({
+      status: 'completed',
+      rpe_score: rpe,
+      notes: notes.trim() || null,
+      completed_at: now,
+    }).eq('id', markingId);
+
+    if (workout?.workouts?.id) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('workout_logs').insert({
+          user_id: user.id,
+          workout_id: workout.workouts.id,
+          scheduled_workout_id: markingId,
+          rpe_score: rpe,
+          notes: notes.trim() || null,
+          completed_at: now,
+        });
+      }
+    }
+
+    setWorkouts(prev => prev.map(w => w.id === markingId ? { ...w, status: 'completed' } : w));
+    setSaving(false);
+    setMarkingId(null);
   };
 
   const getAiTip = async () => {
@@ -125,7 +162,7 @@ export default function TodayClient({ initialWorkouts, todayStr }: TodayClientPr
                 </Link>
               )}
               <button
-                onClick={() => handleMarkDone(w.id)}
+                onClick={() => openMarkDone(w.id)}
                 style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '10px', padding: '13px 16px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, cursor: 'pointer' }}
               >
                 Mark Done
@@ -144,6 +181,43 @@ export default function TodayClient({ initialWorkouts, todayStr }: TodayClientPr
           </div>
         ))}
       </div>
+
+      {/* Mark Done bottom sheet */}
+      {markingId && (() => {
+        const w = workouts.find(x => x.id === markingId);
+        const name = w ? getName(w) : 'Workout';
+        return (
+          <div onClick={() => setMarkingId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-elevated)', borderRadius: '16px 16px 0 0', padding: '28px', width: '100%', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '18px', color: 'var(--text-primary)', margin: 0 }}>{name}</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0' }}>Log completed workout</p>
+                </div>
+                <button onClick={() => setMarkingId(null)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}>×</button>
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <label style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: '13px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Effort (RPE)</label>
+                  <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '28px', color: 'var(--accent)', lineHeight: 1 }}>{rpe}</span>
+                </div>
+                <input type="range" min={1} max={10} value={rpe} onChange={e => setRpe(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Easy (1)</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Max (10)</span>
+                </div>
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: '13px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Notes (optional)</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="How did it feel?" rows={2} style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'DM Sans, sans-serif', resize: 'none', outline: 'none' }} />
+              </div>
+              <button onClick={handleMarkDone} disabled={saving} style={{ width: '100%', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '10px', padding: '16px', fontSize: '16px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                {saving ? 'Saving...' : 'Log & Done ✓'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* AI Coach Tip */}
       <div>
