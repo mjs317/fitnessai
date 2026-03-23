@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format, addDays, parseISO, isSameDay, isToday, isPast } from 'date-fns';
-import { ChevronRight, Plus, Calendar, List, CheckCircle, Upload } from 'lucide-react';
+import { ChevronRight, Plus, Calendar, List, CheckCircle, Upload, BookOpen } from 'lucide-react';
 import ProgramImportModal from '@/components/programs/ProgramImportModal';
 
 interface ScheduledWorkout {
@@ -112,6 +112,9 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
           >
             <Upload size={14} /> Import
           </button>
+          <Link href="/training/programs" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none' }}>
+            <BookOpen size={14} /> Programs
+          </Link>
           <Link href="/training/generate" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent)', color: '#0A0A0A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, textDecoration: 'none' }}>
             <Plus size={14} /> Plan
           </Link>
@@ -120,14 +123,16 @@ export default function TrainingClient({ initialScheduled, plans, todayStr, week
 
       {/* Active plans */}
       {plans.filter(p => p.is_active).map(plan => (
-        <div key={plan.id} style={{ background: 'rgba(232,255,61,0.08)', border: '1px solid rgba(232,255,61,0.2)', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: '13px', color: 'var(--accent)' }}>Active Plan: </span>
-            <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>{plan.name}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>Race: {plan.race_date}</span>
+        <Link key={plan.id} href="/training/programs" style={{ textDecoration: 'none', display: 'block', background: 'rgba(232,255,61,0.08)', border: '1px solid rgba(232,255,61,0.2)', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: '13px', color: 'var(--accent)' }}>Active Program: </span>
+              <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>{plan.name}</span>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{plan.sport} · Tap to manage</div>
+            </div>
+            <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />
           </div>
-          <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />
-        </div>
+        </Link>
       ))}
 
       {/* Week navigation */}

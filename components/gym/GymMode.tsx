@@ -96,6 +96,27 @@ function CountdownRing({ current, max, color = 'var(--accent)', size = 200 }: { 
   );
 }
 
+// ── Block normalizer (handles imported blocks that lack config/label) ───────
+
+function normalizeBlock(b: any): WorkoutBlock {
+  return {
+    ...b,
+    label: b.label || b.name || b.type || 'Block',
+    config: b.config || {},
+    exercises: (b.exercises || []).map((e: any) => ({
+      id: e.id || Math.random().toString(36).slice(2),
+      name: e.name || 'Exercise',
+      sets: e.sets ?? undefined,
+      reps: e.reps ?? undefined,
+      weight_lbs: e.weight_lbs ?? (e.weight ? parseFloat(e.weight) || undefined : undefined),
+      distance_miles: e.distance_miles ?? undefined,
+      duration_sec: e.duration_sec ?? undefined,
+      notes: e.notes ?? undefined,
+      superset: e.superset ?? undefined,
+    })),
+  };
+}
+
 // ── Strength Block ─────────────────────────────────────────────────────────
 
 function StrengthBlock({
@@ -729,7 +750,7 @@ export default function GymMode({ workout, scheduledWorkoutId }: GymModeProps) {
   const [showReview, setShowReview] = useState(false);
   const startTimeRef = useRef(Date.now());
 
-  const blocks = workout.blocks;
+  const blocks = (workout.blocks || []).map(normalizeBlock);
   const currentBlock = blocks[blockIdx];
 
   // Screen wake lock
@@ -844,6 +865,23 @@ export default function GymMode({ workout, scheduledWorkoutId }: GymModeProps) {
         currentBlock.type === 'strength'
           ? <StrengthBlock block={currentBlock} onComplete={handleBlockComplete} onNext={handleBlockComplete} />
           : <TimerBlock block={currentBlock} onComplete={handleBlockComplete} />
+      )}
+
+      {/* No structured blocks — freestyle */}
+      {phase === 'active' && !currentBlock && !showReview && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px', textAlign: 'center', padding: '24px' }}>
+          <p style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Free Workout</p>
+          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '64px', color: 'var(--accent)', lineHeight: 1 }}>
+            {formatElapsed(totalElapsed)}
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No structured blocks — go at your own pace.</p>
+          <button
+            onClick={() => setShowReview(true)}
+            style={{ minHeight: '64px', width: '100%', maxWidth: '360px', background: 'var(--accent)', color: '#0A0A0A', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', cursor: 'pointer' }}
+          >
+            Finish Workout
+          </button>
+        </div>
       )}
 
       {/* Post-workout review */}
